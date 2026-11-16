@@ -81,7 +81,10 @@ def test_dispatch_reads_the_base_revision_from_the_target(tmp_path, repo, monkey
     record = stub_codex(tmp_path, monkeypatch, STARTED, REPORT)
     log = tmp_path / 'log.jsonl'
     with patch.object(dispatch.subprocess, 'run', wraps=subprocess.run) as run:
-        status = dispatch.main([*FIRST, '--target', str(repo), '--log', str(log), '--ignore', 'junk.sh'])
+        status = dispatch.main([
+            *FIRST, '--target', str(repo), '--log', str(log), '--ignore', 'junk.sh',
+            '--untracked', 'src/new.py', '--untracked', 'tests/test_new.py',
+        ])
     # An open non-terminal stdin makes the CLI wait for more prompt text instead of starting.
     assert run.call_args_list[-1].kwargs['stdin'] is subprocess.DEVNULL
     arguments = record.read_text(encoding='utf-8')
@@ -91,6 +94,7 @@ def test_dispatch_reads_the_base_revision_from_the_target(tmp_path, repo, monkey
     assert 'model_reasoning_effort="medium"' in arguments
     assert f'Read {repo}/.agents/skills/adversarial-review/SKILL.md and perform step 3' in arguments
     assert "under the skill's rules.\n" in arguments
+    assert 'In-scope untracked files: src/new.py, tests/test_new.py.' in arguments
     assert 'Unrelated paths to ignore: junk.sh.' in arguments
     assert 'tasks/open/T1.md' in arguments
     assert capsys.readouterr().out == 'SESSION abc\nNo blocking findings.\n'
@@ -116,6 +120,8 @@ def test_dispatch_uses_the_settings_of_the_target(tmp_path, repo, monkeypatch):
     assert f'Read {repo}/docs/REVIEW.md and perform step 3' in arguments
     assert "under the skill's rules. Never call the bank.\n" in arguments
     assert 'the dispatch arguments are model-x and high' in arguments
+    assert 'untracked' not in arguments
+    assert 'Unrelated paths' not in arguments
     assert 'gpt-6.1-sol' not in arguments
 
 

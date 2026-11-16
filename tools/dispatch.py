@@ -108,9 +108,11 @@ def base_revision(target: Path) -> str:
 
 
 def first_prompt(
-    target: Path, boundary: str, record: str, purpose: str, scope: str, ignored: list[str], config: Config,
+    target: Path, boundary: str, record: str, purpose: str, scope: str, untracked: list[str], ignored: list[str],
+    config: Config,
 ) -> str:
     """Return the prompt for a first assessment, supplying only what the review skill allows."""
+    include = f"In-scope untracked files: {', '.join(untracked)}.\n" if untracked else ''
     ignore = f"Unrelated paths to ignore: {', '.join(ignored)}.\n" if ignored else ''
     rules = f'{_RULES} {config.safety}'.rstrip()
     identity = (
@@ -121,7 +123,7 @@ def first_prompt(
         f'Read {target / config.skill} and perform step 3 (Investigate and report) as the independent reviewer. '
         f'{rules}\n\n'
         f'Repository: {target}\nTarget: the working tree, base revision {base_revision(target)}.\n'
-        f'In-scope paths: {scope}.\n{ignore}Purpose: {purpose}\nAccepted boundary: {boundary}\n'
+        f'In-scope paths: {scope}.\n{include}{ignore}Purpose: {purpose}\nAccepted boundary: {boundary}\n'
         f'Working record with the gate results and mutation evidence: {record}\n\n{identity}'
     )
 
@@ -178,6 +180,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--boundary', help='the accepted boundary; required for a first assessment')
     parser.add_argument('--purpose', help='the purpose in a few sentences; required for a first assessment')
     parser.add_argument('--scope', default='every changed tracked file', help='the in-scope paths')
+    parser.add_argument('--untracked', action='append', default=[], help='an in-scope untracked file; repeatable')
     parser.add_argument('--ignore', action='append', default=[], help='an unrelated dirty path; repeatable')
     parser.add_argument('--resume', metavar='SESSION', help='continue this recorded reviewer')
     parser.add_argument('--delta', help='what changed; required with --resume')
@@ -200,7 +203,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.resume:
         prompt = follow_up_prompt(target, args.record, args.delta)
     else:
-        prompt = first_prompt(target, args.boundary, args.record, args.purpose, args.scope, args.ignore, config)
+        prompt = first_prompt(
+            target, args.boundary, args.record, args.purpose, args.scope, args.untracked, args.ignore, config,
+        )
     with args.log.open('w', encoding='utf-8') as log:
         status = subprocess.run(
             codex_command(prompt, args.resume, config), cwd=target, stdin=subprocess.DEVNULL, stdout=log,
