@@ -6,26 +6,33 @@ input is closed, because the CLI otherwise waits for more prompt text. The raw e
 ``--log``; the session ID and the reviewer's report are printed. A missing CLI or login stops the
 dispatch before anything is sent.
 
-Configuration: the optional ``[dispatch]`` table of ``agent-workflow.toml`` at the root of the target.
+Configuration: the optional ``dispatch`` object of ``agent-workflow.json`` at the root of the target.
 Every key is optional, and every value is a string.
 
-    [dispatch]
-    model = "gpt-6.1-sol"     # this is the default
-    effort = "medium"         # this is the default
-    skill = ".agents/skills/adversarial-review/SKILL.md"   # the review skill; this is the default
-    safety = "Never contact the live service."   # a project rule added to the prompt; default: none
+    {"dispatch": {
+        "model": "gpt-6.1-sol",
+        "effort": "medium",
+        "skill": ".agents/skills/adversarial-review/SKILL.md",
+        "safety": "Never contact the live service."
+    }}
+
+``model``, ``effort`` and ``skill`` show their defaults. ``skill`` is the path of the review skill.
+``safety`` is a project rule that the first prompt states, and its default is none.
+
+The tool needs Python 3.9 or later, Git and the Codex CLI. It uses only the standard library.
 """
+
+from __future__ import annotations
 
 import argparse
 import dataclasses
 import json
 import subprocess
 import sys
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-CONFIG_FILE = 'agent-workflow.toml'
+CONFIG_FILE = 'agent-workflow.json'
 _RULES = (
     'The repository is read-only for you; run anything that needs writable state in a disposable scratch copy '
     "under the skill's rules."
@@ -58,20 +65,21 @@ class Config:
 def load_config(target: Path) -> Config:
     """Return the settings in the target's configuration file, or the defaults if it has none.
 
-    The other tables of the file belong to other tools, and they are not read.
+    The other objects of the file belong to other tools, and they are not read.
 
     Raises:
-        ValueError: If the file is not valid TOML, or a key is unknown or is not a string.
+        ValueError: If the file is not valid JSON, or a key is unknown or is not a string.
     """
     path = target / CONFIG_FILE
     if not path.is_file():
         return Config()
     try:
-        table = tomllib.loads(path.read_text(encoding='utf-8')).get('dispatch', {})
-    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as error:
+        document = json.loads(path.read_text(encoding='utf-8'))
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
         raise ValueError(f'{CONFIG_FILE}: {error}') from error
+    table = document.get('dispatch', {}) if isinstance(document, dict) else None
     if not isinstance(table, dict):
-        raise ValueError(f'{CONFIG_FILE}: dispatch is not a table')
+        raise ValueError(f'{CONFIG_FILE}: the file or dispatch is not an object')
     known = {field.name for field in dataclasses.fields(Config)}
     for key, value in table.items():
         if key not in known:

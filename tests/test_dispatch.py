@@ -100,9 +100,13 @@ def test_dispatch_reads_the_base_revision_from_the_target(tmp_path, repo, monkey
 def test_dispatch_uses_the_settings_of_the_target(tmp_path, repo, monkeypatch):
     """The model, the effort, the skill and the safety rule come from the target's configuration."""
     record = stub_codex(tmp_path, monkeypatch, STARTED, REPORT)
-    (repo / 'agent-workflow.toml').write_text(
-        '[check_docs]\nanother = "tool reads this table"\n\n'
-        '[dispatch]\nmodel = "model-x"\neffort = "high"\nskill = "docs/REVIEW.md"\nsafety = "Never call the bank."\n',
+    (repo / 'agent-workflow.json').write_text(
+        json.dumps({
+            'check_docs': {'another': 'tool reads this object'},
+            'dispatch': {
+                'model': 'model-x', 'effort': 'high', 'skill': 'docs/REVIEW.md', 'safety': 'Never call the bank.',
+            },
+        }),
         encoding='utf-8',
     )
     assert dispatch.main([*FIRST, '--target', str(repo), '--log', str(tmp_path / 'log')]) == 0
@@ -118,7 +122,7 @@ def test_dispatch_uses_the_settings_of_the_target(tmp_path, repo, monkeypatch):
 def test_dispatch_resumes_the_recorded_reviewer(tmp_path, repo, monkeypatch):
     """A follow-up continues the named session with the configured model rather than starting another."""
     record = stub_codex(tmp_path, monkeypatch, REPORT)
-    (repo / 'agent-workflow.toml').write_text('[dispatch]\nmodel = "model-x"\n', encoding='utf-8')
+    (repo / 'agent-workflow.json').write_text('{"dispatch": {"model": "model-x"}}', encoding='utf-8')
     status = dispatch.main([
         '--record', 'rec.md', '--target', str(repo), '--log', str(tmp_path / 'log'),
         '--resume', 'abc', '--delta', 'A fix.',
@@ -132,15 +136,16 @@ def test_dispatch_resumes_the_recorded_reviewer(tmp_path, repo, monkeypatch):
 
 
 @pytest.mark.parametrize(('text', 'message'), [
-    ('[dispatch', 'agent-workflow.toml: '),
-    ('dispatch = 1\n', 'agent-workflow.toml: dispatch is not a table'),
-    ('[dispatch]\nmodle = "x"\n', 'agent-workflow.toml: unknown key dispatch.modle'),
-    ('[dispatch]\neffort = 3\n', 'agent-workflow.toml: dispatch.effort is not a string'),
+    ('{"dispatch"', 'agent-workflow.json: '),
+    ('{"dispatch": 1}', 'agent-workflow.json: the file or dispatch is not an object'),
+    ('[]', 'agent-workflow.json: the file or dispatch is not an object'),
+    ('{"dispatch": {"modle": "x"}}', 'agent-workflow.json: unknown key dispatch.modle'),
+    ('{"dispatch": {"effort": 3}}', 'agent-workflow.json: dispatch.effort is not a string'),
 ])
 def test_dispatch_stops_on_an_invalid_configuration(tmp_path, repo, monkeypatch, capsys, text, message):
-    """A file that is not TOML, an unknown key and a value that is no string stop the dispatch unsent."""
+    """A file that is not JSON, an unknown key and a value that is no string stop the dispatch unsent."""
     record = stub_codex(tmp_path, monkeypatch, STARTED, REPORT)
-    (repo / 'agent-workflow.toml').write_text(text, encoding='utf-8')
+    (repo / 'agent-workflow.json').write_text(text, encoding='utf-8')
     assert dispatch.main([*FIRST, '--target', str(repo), '--log', str(tmp_path / 'log')]) == 2
     assert f'dispatch: {message}' in capsys.readouterr().err
     assert not record.exists()
@@ -149,9 +154,9 @@ def test_dispatch_stops_on_an_invalid_configuration(tmp_path, repo, monkeypatch,
 def test_dispatch_stops_on_a_configuration_that_is_not_text(tmp_path, repo, monkeypatch, capsys):
     """A configuration file that is not UTF-8 is reported instead of raising."""
     stub_codex(tmp_path, monkeypatch, STARTED, REPORT)
-    (repo / 'agent-workflow.toml').write_bytes(b'\xff\xfe')
+    (repo / 'agent-workflow.json').write_bytes(b'\xff\xfe')
     assert dispatch.main([*FIRST, '--target', str(repo), '--log', str(tmp_path / 'log')]) == 2
-    assert 'dispatch: agent-workflow.toml: ' in capsys.readouterr().err
+    assert 'dispatch: agent-workflow.json: ' in capsys.readouterr().err
 
 
 def test_dispatch_propagates_the_cli_status(tmp_path, repo, monkeypatch):

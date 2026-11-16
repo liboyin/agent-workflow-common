@@ -6,8 +6,10 @@ untracked files. Write JSON snapshots outside the repository and compare only
 successful runs. A submodule, or a tracked path below a working-tree symlink,
 makes the snapshot fail, because Git would scan outside the root index. This is an integrity check, not
 protection against concurrent filesystem mutation. Git must be installed; no
-application imports are needed.
+application imports are needed. Python 3.9 or later is enough.
 """
+
+from __future__ import annotations
 
 import argparse
 import hashlib
@@ -140,7 +142,7 @@ def collect_snapshot(directory: Path, untracked: list[str]) -> dict[str, object]
     index = path_records(git(root, 'ls-files', '--stage', '-z'))
     names = [record.split('\t', 1)[1] for record in index]
     # The root index does not describe a submodule's contents, which `git status` scans recursively.
-    gitlinks = [name for record, name in zip(index, names, strict=True) if record.startswith('160000 ')]
+    gitlinks = [name for record, name in zip(index, names) if record.startswith('160000 ')]
     if gitlinks:
         raise ValueError(f'submodules are unsupported, since Git would scan their working trees: {gitlinks!r}')
     links = symlinked_ancestors(root, names)

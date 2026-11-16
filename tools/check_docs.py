@@ -14,33 +14,43 @@ for each sentence) and other prose as a description (35 words). Code, tables, he
 YAML front matter are exempt. In the files that the configuration names as not rewritten as a whole,
 only changed lines are checked: lines that ``git diff HEAD`` adds, and every line of an untracked file.
 
-Configuration: the optional ``[check_docs]`` table of ``agent-workflow.toml`` at the root of the
+Configuration: the optional ``check_docs`` object of ``agent-workflow.json`` at the root of the
 repository. Every key is optional.
 
-    [check_docs]
-    changed_lines_only = ["DESIGN.md", "tasks/closed/"]   # path prefixes; default: none
+    {"check_docs": {
+        "changed_lines_only": ["DESIGN.md", "tasks/closed/"],
+        "tasks": {
+            "id": "T\\d+",
+            "title_separators": [":"],
+            "exempt": ["tasks/closed/an-old-record.md"]
+        }
+    }}
 
-    [check_docs.tasks]
-    id = 'T\d+'                # a regular expression that matches a whole task ID; this is the default
-    title_separators = [":"]   # the text that may follow the ID in a title; this is the default
-    exempt = ["tasks/closed/an-old-record.md"]   # task files that the task rules skip; default: none
+``changed_lines_only`` lists path prefixes, and its default is none. ``tasks.id`` is a regular
+expression that matches a whole task ID, and ``tasks.title_separators`` lists each text that may follow
+the ID in a title. The values above are their defaults. ``tasks.exempt`` lists the task files that the
+task rules skip, and its default is none.
+
+The tool needs Python 3.9 or later and Git. It uses only the standard library.
 
 With ``--references``, it runs no check. It lists each line that links to a file, a directory or a
 heading, for example ``--references AGENTS.md`` or ``--references 'AGENTS.md#governance-files'``. The
 path is relative to the root of the repository. A file query includes the links to its headings.
 """
 
+from __future__ import annotations
+
 import argparse
+import json
 import re
 import subprocess
 import sys
-import tomllib
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import unquote
 
-CONFIG_FILE = 'agent-workflow.toml'
+CONFIG_FILE = 'agent-workflow.json'
 INDEX_FILE = 'tasks/TODO.md'
 ITEM_WORDS, PROSE_WORDS, PARAGRAPH_SENTENCES = 28, 35, 7
 
@@ -128,20 +138,21 @@ def _strings(table: dict[str, object], key: str, default: tuple[str, ...], name:
 def load_config(repo: Path) -> Config:
     """Return the settings in the repository's configuration file, or the defaults if it has none.
 
-    The other tables of the file belong to other tools, and they are not read.
+    The other objects of the file belong to other tools, and they are not read.
 
     Raises:
-        ValueError: If the file is not valid TOML, or a key is unknown or has the wrong type.
+        ValueError: If the file is not valid JSON, or a key is unknown or has the wrong type.
     """
     if not (repo / CONFIG_FILE).is_file():
         return Config()
     try:
-        table = tomllib.loads(read(repo, CONFIG_FILE)).get('check_docs', {})
-    except tomllib.TOMLDecodeError as error:
+        document = json.loads(read(repo, CONFIG_FILE))
+    except json.JSONDecodeError as error:
         raise ValueError(f'{CONFIG_FILE}: {error}') from error
+    table = document.get('check_docs', {}) if isinstance(document, dict) else None
     tasks = table.pop('tasks', {}) if isinstance(table, dict) else None
-    if not isinstance(tasks, dict):
-        raise ValueError(f'{CONFIG_FILE}: check_docs or check_docs.tasks is not a table')
+    if not isinstance(table, dict) or not isinstance(tasks, dict):
+        raise ValueError(f'{CONFIG_FILE}: the file, check_docs or check_docs.tasks is not an object')
     changed = _strings(table, 'changed_lines_only', (), 'changed_lines_only')
     task_id = tasks.pop('id', Config.task_id)
     separators = _strings(tasks, 'title_separators', Config.title_separators, 'tasks.title_separators')
