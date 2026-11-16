@@ -361,7 +361,8 @@ def check_tasks(repo: Path, files: list[str], config: Config) -> list[Problem]:
         return []
     problems = []
     task_id = re.compile(config.task_id)
-    index = re.compile(rf'- \[({config.task_id})\]\(open/({config.task_id})\.md\)')
+    # Parse the index before applying the configured pattern, whose captures and anchors are local.
+    index = re.compile(r'- \[([^\]]*)\]\(open/([^/)]*)\.md\)')
     states: dict[str, dict[str, str]] = {'open': {}, 'closed': {}}
     for state, found in states.items():
         for name in files:
@@ -372,7 +373,7 @@ def check_tasks(repo: Path, files: list[str], config: Config) -> list[Problem]:
                     problems.append(Problem(name, 1, 'tasks', f'the file name {Path(name).stem} is not a task ID'))
     indexed: Counter[str] = Counter()
     for number, line in enumerate(read(repo, index_file).splitlines(), start=1):
-        if match := index.match(line):
+        if (match := index.match(line)) and task_id.fullmatch(match[1]) and task_id.fullmatch(match[2]):
             indexed[match[2]] += 1
             if match[1] != match[2]:
                 problems.append(Problem(index_file, number, 'tasks', f'the label {match[1]} links to {match[2]}'))

@@ -397,6 +397,13 @@ def test_consistent_task_files_pass(repo, capsys):
     assert repo.check(capsys) == (0, [])
 
 
+def test_an_index_entry_can_have_another_link_in_its_description(repo, capsys):
+    """A later link on the same line cannot become part of the task destination."""
+    tasks(repo, '- [T1](open/T1.md) — See [notes](notes.md).\n')
+    repo.write('tasks/notes.md', '# Notes\n')
+    assert repo.check(capsys) == (0, [])
+
+
 def test_an_open_task_without_an_index_line_is_reported(repo, capsys):
     """Every open task must appear in the index."""
     tasks(repo, '')
@@ -473,9 +480,12 @@ def test_an_exempt_task_file_is_skipped_by_the_task_rules_only(repo, capsys):
     assert lines == ['tasks/closed/an-old-record.md:3: link: missing.md does not exist']
 
 
-def test_the_configured_id_pattern_and_title_separators_apply(repo, capsys):
+@pytest.mark.parametrize('pattern', [
+    r'(?:NB|T)\d+', r'(NB|T)\d+', r'^(?:NB|T)\d+$', r'(?P<prefix>NB|T)\d+',
+])
+def test_the_configured_id_pattern_and_title_separators_apply(repo, capsys, pattern):
     """Other prefixes become IDs, each listed separator is accepted, and an unlisted one is reported."""
-    repo.write('agent-workflow.json', tasks_config(id=r'(?:NB|T)\d+', title_separators=[':', ' —']))
+    repo.write('agent-workflow.json', tasks_config(id=pattern, title_separators=[':', ' —']))
     repo.write('tasks/TODO.md', '# TODO\n\n- [NB7](open/NB7.md) — Low.\n- [T1](open/T1.md) — Low.\n')
     repo.write('tasks/open/NB7.md', '# NB7 — a finding\n')
     repo.write('tasks/open/T1.md', '# T1: a task\n')
@@ -489,6 +499,15 @@ def test_the_configured_id_pattern_and_title_separators_apply(repo, capsys):
         'tasks/open/NB8.md:1: tasks: NB8 has no line in the index of tasks/TODO.md',
         'tasks/open/NB8.md:1: tasks: the title does not start with "# NB8:" or "# NB8 —"',
     ]
+
+
+@pytest.mark.parametrize(('label', 'destination'), [('T1x', 'T1'), ('T1', 'T1x'), ('T1x', 'T1x')])
+def test_index_entries_require_whole_ids_in_both_positions(repo, capsys, label, destination):
+    """A link with an invalid label or destination does not count as a task index entry."""
+    tasks(repo, f'- [T1](open/T1.md) — Low.\n- [{label}](open/{destination}.md) — Other.\n')
+    repo.write('agent-workflow.json', tasks_config(exempt=['tasks/open/T1x.md']))
+    repo.write('tasks/open/T1x.md', '# Other record\n')
+    assert repo.check(capsys) == (0, [])
 
 
 def test_the_id_pattern_must_match_the_whole_name(repo, capsys):
