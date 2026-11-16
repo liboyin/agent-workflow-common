@@ -7,6 +7,7 @@ import io
 import json
 import os
 import runpy
+import stat
 import subprocess
 import sys
 from contextlib import contextmanager
@@ -97,7 +98,10 @@ def test_working_entry_stops_at_symlinked_ancestor_without_reading(repo, tmp_pat
     (root / 'dir').symlink_to(outside)
     with forbid_content_reads():
         entry = testee.working_entry(root, 'dir/data')
-    assert entry == {'path': 'dir/data', 'kind': 'symlink-ancestor', 'link': 'dir', 'target': str(outside)}
+    assert entry == {
+        'path': 'dir/data', 'kind': 'symlink-ancestor', 'link': 'dir', 'target': str(outside),
+        'mode': stat.S_IMODE((root / 'dir').lstat().st_mode),
+    }
 
 
 def test_working_entry_records_special_files_without_opening_them(repo):
@@ -174,6 +178,24 @@ def test_collect_snapshot_never_reads_leaf_symlink_targets(repo, tmp_path):
         entry = testee.collect_snapshot(root, [])['entries'][0]
     assert entry['kind'] == 'symlink'
     assert entry['target'] == str(outside / 'data')
+    assert entry['mode'] == stat.S_IMODE((root / 'dir/data').lstat().st_mode)
+
+
+@pytest.mark.skipif(not hasattr(os, 'lchmod'), reason='platform cannot change symlink permissions')
+def test_collect_snapshot_distinguishes_symlink_permission_changes(repo):
+    """Changing an included link's permissions changes the snapshot without following its target."""
+    root, _ = repo
+    link = root / 'link'
+    link.symlink_to('missing')
+    os.lchmod(link, 0o755)
+    with forbid_content_reads():
+        before = testee.collect_snapshot(root, ['link'])
+    os.lchmod(link, 0o700)
+    with forbid_content_reads():
+        after = testee.collect_snapshot(root, ['link'])
+    assert before['entries'][0]['mode'] == 0o755
+    assert after['entries'][0]['mode'] == 0o700
+    assert before != after
 
 
 def test_collect_snapshot_refuses_symlinked_ancestors_before_scanning_the_worktree(repo, tmp_path):

@@ -106,6 +106,7 @@ def working_entry(root: Path, name: str) -> dict[str, str | int]:
                 'kind': 'symlink' if index == len(parts) - 1 else 'symlink-ancestor',
                 'link': path.relative_to(root).as_posix(),
                 'target': os.readlink(path),
+                'mode': stat.S_IMODE(mode),
             }
     entry: dict[str, str | int] = {'path': name, 'mode': stat.S_IMODE(mode)}
     if stat.S_ISREG(mode):
