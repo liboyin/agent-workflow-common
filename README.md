@@ -1,6 +1,6 @@
 # agent-workflow-common
 
-Shared tooling for agent-driven repositories. The tools are standalone Python scripts that use only the standard library. Each project keeps a pinned copy of a tool and its own configuration.
+Shared tooling for agent-driven repositories. The tools are standalone Python scripts that use only the standard library.
 
 ## Tools
 
