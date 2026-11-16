@@ -1,0 +1,45 @@
+[project]
+name = "agent-workflow-common"
+version = "0.1.0"
+description = "Shared tooling for agent-driven repositories"
+requires-python = ">=3.11"
+
+[dependency-groups]
+dev = [
+  "mypy",
+  "pytest",
+  "pytest-cov",
+  "pytest-randomly",
+  "ruff",
+]
+
+[tool.uv]
+package = false
+
+[tool.mypy]
+check_untyped_defs = true
+disallow_untyped_defs = true
+strict_optional = true
+warn_redundant_casts = true
+warn_unused_configs = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers --cov=tools --cov-report=term-missing --cov-fail-under=100"
+# Any warning fails its test. A test that expects one asserts it with pytest.warns.
+filterwarnings = ["error"]
+xfail_strict = true
+
+[tool.coverage.run]
+branch = true
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+# pycodestyle, Pyflakes, import order, bugbear, pyupgrade and pydocstyle.
+select = ["E", "W", "F", "I", "B", "UP", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
