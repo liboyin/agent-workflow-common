@@ -14,11 +14,13 @@ for each sentence) and other prose as a description (35 words). Code, tables, he
 YAML front matter are exempt. In the files that the configuration names as not rewritten as a whole,
 only changed lines are checked: lines that ``git diff HEAD`` adds, and every line of an untracked file.
 
-Configuration: an optional ``check_docs.toml`` at the root of the repository. Every key is optional.
+Configuration: the optional ``[check_docs]`` table of ``agent-workflow.toml`` at the root of the
+repository. Every key is optional.
 
+    [check_docs]
     changed_lines_only = ["DESIGN.md", "tasks/closed/"]   # path prefixes; default: none
 
-    [tasks]
+    [check_docs.tasks]
     id = 'T\d+'                # a regular expression that matches a whole task ID; this is the default
     title_separators = [":"]   # the text that may follow the ID in a title; this is the default
     exempt = ["tasks/closed/an-old-record.md"]   # task files that the task rules skip; default: none
@@ -38,7 +40,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import unquote
 
-CONFIG_FILE = 'check_docs.toml'
+CONFIG_FILE = 'agent-workflow.toml'
 INDEX_FILE = 'tasks/TODO.md'
 ITEM_WORDS, PROSE_WORDS, PARAGRAPH_SENTENCES = 28, 35, 7
 
@@ -126,18 +128,20 @@ def _strings(table: dict[str, object], key: str, default: tuple[str, ...], name:
 def load_config(repo: Path) -> Config:
     """Return the settings in the repository's configuration file, or the defaults if it has none.
 
+    The other tables of the file belong to other tools, and they are not read.
+
     Raises:
         ValueError: If the file is not valid TOML, or a key is unknown or has the wrong type.
     """
     if not (repo / CONFIG_FILE).is_file():
         return Config()
     try:
-        table = tomllib.loads(read(repo, CONFIG_FILE))
+        table = tomllib.loads(read(repo, CONFIG_FILE)).get('check_docs', {})
     except tomllib.TOMLDecodeError as error:
         raise ValueError(f'{CONFIG_FILE}: {error}') from error
-    tasks = table.pop('tasks', {})
+    tasks = table.pop('tasks', {}) if isinstance(table, dict) else None
     if not isinstance(tasks, dict):
-        raise ValueError(f'{CONFIG_FILE}: tasks is not a table')
+        raise ValueError(f'{CONFIG_FILE}: check_docs or check_docs.tasks is not a table')
     changed = _strings(table, 'changed_lines_only', (), 'changed_lines_only')
     task_id = tasks.pop('id', Config.task_id)
     separators = _strings(tasks, 'title_separators', Config.title_separators, 'tasks.title_separators')

@@ -20,7 +20,10 @@ SPEC.loader.exec_module(testee)
 LONG = ' '.join(['word'] * 36) + '.'
 ITEM_LONG = '- ' + ' '.join(['word'] * 29) + '.'
 PARTIAL = ['DESIGN.md', 'project-review-2026-11-10.md', 'tasks/open/T1.md', 'tasks/closed/T2.md']
-PARTIAL_CONFIG = 'changed_lines_only = ["DESIGN.md", "project-review-2026-11-10.md", "tasks/open/", "tasks/closed/"]\n'
+PARTIAL_CONFIG = (
+    '[check_docs]\n'
+    'changed_lines_only = ["DESIGN.md", "project-review-2026-11-10.md", "tasks/open/", "tasks/closed/"]\n'
+)
 
 
 class Repo:
@@ -320,7 +323,7 @@ def test_a_paragraph_on_two_source_lines_is_reported(repo, capsys):
 def test_only_changed_lines_are_checked_in_files_that_are_not_rewritten(repo, capsys, name):
     """Committed dense text stays unreported; a line that the working tree adds or changes is checked."""
     title = f'# {Path(name).stem}: a title'
-    repo.write('check_docs.toml', PARTIAL_CONFIG)
+    repo.write('agent-workflow.toml', PARTIAL_CONFIG)
     repo.write(name, f'{title}\n\n{LONG}\n\nOld; text.\n')
     repo.commit()
     assert repo.check(capsys) == (0, [])
@@ -332,7 +335,7 @@ def test_only_changed_lines_are_checked_in_files_that_are_not_rewritten(repo, ca
 
 def test_a_staged_change_counts_as_changed(repo, capsys):
     """The comparison is against HEAD, so a staged line is checked like an unstaged one."""
-    repo.write('check_docs.toml', PARTIAL_CONFIG)
+    repo.write('agent-workflow.toml', PARTIAL_CONFIG)
     repo.write('DESIGN.md', '# Design\n\nOld; text.\n')
     repo.commit()
     repo.write('DESIGN.md', '# Design\n\nOld; text.\n\nNew; text.\n')
@@ -345,7 +348,7 @@ def test_a_staged_change_counts_as_changed(repo, capsys):
 def test_a_moved_task_file_keeps_its_old_lines_unchecked(repo, capsys):
     """A record that git mv moved from open to closed is checked only where it changed."""
     old = '# T1: a title\n\n' + ''.join(f'Old; text {number}.\n\n' for number in range(8))
-    repo.write('check_docs.toml', PARTIAL_CONFIG)
+    repo.write('agent-workflow.toml', PARTIAL_CONFIG)
     repo.write('tasks/open/T1.md', old)
     repo.commit()
     (repo.root / 'tasks/closed').mkdir()
@@ -358,7 +361,7 @@ def test_a_moved_task_file_keeps_its_old_lines_unchecked(repo, capsys):
 
 def test_an_untracked_file_is_checked_as_a_whole(repo, capsys):
     """A new record has no committed lines, so every line of it is in scope."""
-    repo.write('check_docs.toml', PARTIAL_CONFIG)
+    repo.write('agent-workflow.toml', PARTIAL_CONFIG)
     repo.commit()
     repo.write('tasks/closed/T3.md', '# T3: a title\n\nNew; text.\n\nMore; text.\n')
     status, lines = repo.check(capsys)
@@ -457,7 +460,8 @@ def test_a_task_file_whose_name_is_no_id_is_reported(repo, capsys):
 def test_an_exempt_task_file_is_skipped_by_the_task_rules_only(repo, capsys):
     """An exempt record needs no ID, no title and no index line, but its links are still checked."""
     tasks(repo, '- [T1](open/T1.md) — Low.\n')
-    repo.write('check_docs.toml', '[tasks]\nexempt = ["tasks/closed/an-old-record.md", "tasks/open/T5.md"]\n')
+    exempt = '["tasks/closed/an-old-record.md", "tasks/open/T5.md"]'
+    repo.write('agent-workflow.toml', f'[check_docs.tasks]\nexempt = {exempt}\n')
     repo.write('tasks/closed/an-old-record.md', '# An old record\n\nSee [it](missing.md).\n')
     repo.write('tasks/open/T5.md', '# Untitled\n')
     status, lines = repo.check(capsys)
@@ -467,7 +471,7 @@ def test_an_exempt_task_file_is_skipped_by_the_task_rules_only(repo, capsys):
 
 def test_the_configured_id_pattern_and_title_separators_apply(repo, capsys):
     """Other prefixes become IDs, each listed separator is accepted, and an unlisted one is reported."""
-    repo.write('check_docs.toml', "[tasks]\nid = '(?:NB|T)\\d+'\ntitle_separators = [':', ' —']\n")
+    repo.write('agent-workflow.toml', "[check_docs.tasks]\nid = '(?:NB|T)\\d+'\ntitle_separators = [':', ' —']\n")
     repo.write('tasks/TODO.md', '# TODO\n\n- [NB7](open/NB7.md) — Low.\n- [T1](open/T1.md) — Low.\n')
     repo.write('tasks/open/NB7.md', '# NB7 — a finding\n')
     repo.write('tasks/open/T1.md', '# T1: a task\n')
@@ -492,9 +496,9 @@ def test_the_id_pattern_must_match_the_whole_name(repo, capsys):
     assert lines == ['tasks/closed/T2x.md:1: tasks: the file name T2x is not a task ID']
 
 
-def test_an_empty_configuration_keeps_the_defaults(repo, capsys):
-    """A configuration file without keys changes nothing: every file is checked as a whole."""
-    repo.write('check_docs.toml', '')
+def test_a_configuration_without_the_table_keeps_the_defaults(repo, capsys):
+    """A file without the tool's table changes nothing, and the tables of other tools are not read."""
+    repo.write('agent-workflow.toml', '[dispatch]\nmodel = "another tool reads this table"\n')
     repo.write('DESIGN.md', '# Design\n\nOld; text.\n')
     repo.commit()
     status, lines = repo.check(capsys)
@@ -503,30 +507,31 @@ def test_an_empty_configuration_keeps_the_defaults(repo, capsys):
 
 
 @pytest.mark.parametrize(('text', 'message'), [
-    ('changed_lines_only = [', 'check_docs.toml: '),
-    ('changed_lines_only = "DESIGN.md"\n', 'check_docs.toml: changed_lines_only is not a list of strings'),
-    ('changed_lines_only = [1]\n', 'check_docs.toml: changed_lines_only is not a list of strings'),
-    ('tasks = 1\n', 'check_docs.toml: tasks is not a table'),
-    ('[tasks]\nexempt = "a.md"\n', 'check_docs.toml: tasks.exempt is not a list of strings'),
-    ('[tasks]\ntitle_separators = [1]\n', 'check_docs.toml: tasks.title_separators is not a list of strings'),
-    ('[tasks]\ntitle_separators = []\n', 'check_docs.toml: tasks.title_separators is empty'),
-    ('[tasks]\nid = 1\n', 'check_docs.toml: tasks.id is not a string'),
-    ("[tasks]\nid = '('\n", 'check_docs.toml: tasks.id is not a regular expression: '),
-    ('changed_lines = []\n', 'check_docs.toml: unknown key changed_lines'),
-    ('[tasks]\nids = "T"\n', 'check_docs.toml: unknown key tasks.ids'),
+    ('[check_docs]\nchanged_lines_only = [', ''),
+    ('[check_docs]\nchanged_lines_only = "DESIGN.md"\n', 'changed_lines_only is not a list of strings'),
+    ('[check_docs]\nchanged_lines_only = [1]\n', 'changed_lines_only is not a list of strings'),
+    ('[check_docs]\ntasks = 1\n', 'check_docs or check_docs.tasks is not a table'),
+    ('check_docs = 1\n', 'check_docs or check_docs.tasks is not a table'),
+    ('[check_docs.tasks]\nexempt = "a.md"\n', 'tasks.exempt is not a list of strings'),
+    ('[check_docs.tasks]\ntitle_separators = [1]\n', 'tasks.title_separators is not a list of strings'),
+    ('[check_docs.tasks]\ntitle_separators = []\n', 'tasks.title_separators is empty'),
+    ('[check_docs.tasks]\nid = 1\n', 'tasks.id is not a string'),
+    ("[check_docs.tasks]\nid = '('\n", 'tasks.id is not a regular expression: '),
+    ('[check_docs]\nchanged_lines = []\n', 'unknown key changed_lines'),
+    ('[check_docs.tasks]\nids = "T"\n', 'unknown key tasks.ids'),
 ])
 def test_an_invalid_configuration_stops_the_check(repo, capsys, text, message):
     """A file that is not TOML, an unknown key and a value of the wrong type each give status two."""
-    repo.write('check_docs.toml', text)
+    repo.write('agent-workflow.toml', text)
     assert testee.main(['--repo', str(repo.root)]) == 2
     captured = capsys.readouterr()
-    assert f'check_docs: cannot check the documentation: {message}' in captured.err
+    assert f'check_docs: cannot check the documentation: agent-workflow.toml: {message}' in captured.err
     assert captured.out == ''
 
 
 def test_the_configuration_does_not_affect_the_reference_report(repo, capsys):
     """The report reads no configuration, so an invalid file does not stop it."""
-    repo.write('check_docs.toml', 'not toml [')
+    repo.write('agent-workflow.toml', 'not toml [')
     repo.write('guide.md', '# Guide\n')
     repo.write('README.md', '# Project\n\n[g](guide.md)\n')
     assert testee.main(['--repo', str(repo.root), '--references', 'guide.md']) == 0
