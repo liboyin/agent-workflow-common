@@ -364,6 +364,21 @@ def test_a_moved_task_file_keeps_its_old_lines_unchecked(repo, capsys):
     assert [line.split(': ')[0] for line in lines] == ['tasks/closed/T1.md:19']
 
 
+def test_a_moved_task_file_that_grew_many_times_keeps_its_old_lines_unchecked(repo, capsys):
+    """A short task that becomes a long completion record is still paired with the file it was moved from."""
+    old = '# T1: a title\n\nOld; text.\n'
+    repo.write('agent-workflow.json', PARTIAL_CONFIG)
+    repo.write('tasks/open/T1.md', old)
+    repo.commit()
+    (repo.root / 'tasks/closed').mkdir()
+    repo.git('mv', 'tasks/open/T1.md', 'tasks/closed/T1.md')
+    record = ''.join(f'A clean sentence of the record, number {number}.\n\n' for number in range(40))
+    repo.write('tasks/closed/T1.md', old + '\n' + record + 'New; text.\n')
+    status, lines = repo.check(capsys)
+    assert status == 1
+    assert [line.split(': ')[0] for line in lines] == ['tasks/closed/T1.md:85']
+
+
 def test_an_untracked_file_is_checked_as_a_whole(repo, capsys):
     """A new record has no committed lines, so every line of it is in scope."""
     repo.write('agent-workflow.json', PARTIAL_CONFIG)

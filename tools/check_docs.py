@@ -181,9 +181,10 @@ def changed_lines(repo: Path) -> tuple[dict[str, set[int]], set[str]]:
     """Return the lines that the working tree adds to each file since ``HEAD``, and the untracked files.
 
     A file that ``git mv`` moved keeps its unchanged lines out of the result, because the diff detects
-    renames.
+    renames. The similarity threshold is low, so that a moved file still pairs with its origin after
+    it has grown to many times its size, as a task file does when it becomes a completion record.
     """
-    diff = git(repo, 'diff', 'HEAD', '--find-renames=20%', '--unified=0', '--no-color', '--no-ext-diff', '--', '*.md')
+    diff = git(repo, 'diff', 'HEAD', '--find-renames=1%', '--unified=0', '--no-color', '--no-ext-diff', '--', '*.md')
     added: dict[str, set[int]] = {}
     current: set[int] = set()
     for line in diff.splitlines():
