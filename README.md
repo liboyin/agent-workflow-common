@@ -71,8 +71,10 @@ Run `snapshot.py [UNTRACKED...] > before.json` from a repository, and name each 
 `dispatch.py` writes the reviewer's prompt, runs the Codex CLI with closed standard input, and prints the session ID and the report.
 
 - A first assessment needs `--record`, `--log`, `--boundary` and `--purpose`. Name each in-scope untracked file with `--untracked`.
+- A task group passes `--boundary` once for each task, and the prompt names every boundary.
 - A follow-up needs `--record`, `--log`, `--resume SESSION` and `--delta`.
 - `--target` names the repository or the frozen worktree. The default is the working directory.
+- After a report, the tool reminds the main agent on standard error to compare integrity snapshots before any edit.
 - The exit status is the CLI's status. It is 1 for a run without a report, and 2 for a missing CLI, a missing login or an invalid configuration.
 - The tool runs the CLI with `--dangerously-bypass-approvals-and-sandbox`. Use it only where the user accepts that.
 

@@ -96,9 +96,21 @@ def test_dispatch_reads_the_base_revision_from_the_target(tmp_path, repo, monkey
     assert "under the skill's rules.\n" in arguments
     assert 'In-scope untracked files: src/new.py, tests/test_new.py.' in arguments
     assert 'Unrelated paths to ignore: junk.sh.' in arguments
-    assert 'tasks/open/T1.md' in arguments
-    assert capsys.readouterr().out == 'SESSION abc\nNo blocking findings.\n'
+    assert 'Accepted boundary: tasks/open/T1.md\n' in arguments
+    output = capsys.readouterr()
+    assert output.out == 'SESSION abc\nNo blocking findings.\n'
+    assert 'compare it with the one taken before this dispatch' in output.err
     assert 'thread.started' in log.read_text(encoding='utf-8')
+
+
+def test_dispatch_names_every_boundary_of_a_task_group(tmp_path, repo, monkeypatch):
+    """A group passes --boundary once per task, and the prompt names each accepted boundary."""
+    record = stub_codex(tmp_path, monkeypatch, STARTED, REPORT)
+    status = dispatch.main([
+        *FIRST, '--boundary', 'tasks/open/T2.md', '--target', str(repo), '--log', str(tmp_path / 'log'),
+    ])
+    assert status == 0
+    assert 'Accepted boundaries: tasks/open/T1.md, tasks/open/T2.md\n' in record.read_text(encoding='utf-8')
 
 
 def test_dispatch_uses_the_settings_of_the_target(tmp_path, repo, monkeypatch):
@@ -171,11 +183,20 @@ def test_dispatch_propagates_the_cli_status(tmp_path, repo, monkeypatch):
     assert dispatch.main([*FIRST, '--target', str(repo), '--log', str(tmp_path / 'log')]) == 3
 
 
+def test_dispatch_gives_no_snapshot_reminder_for_a_failed_run_without_a_report(tmp_path, repo, monkeypatch, capsys):
+    """A CLI failure that returned no report propagates its status without the reminder that follows a review."""
+    stub_codex(tmp_path, monkeypatch, STARTED, status=3)
+    assert dispatch.main([*FIRST, '--target', str(repo), '--log', str(tmp_path / 'log')]) == 3
+    assert 'snapshot' not in capsys.readouterr().err
+
+
 def test_dispatch_fails_without_a_report(tmp_path, repo, monkeypatch, capsys):
     """A successful exit with no report is not a review."""
     stub_codex(tmp_path, monkeypatch, STARTED)
     assert dispatch.main([*FIRST, '--target', str(repo), '--log', str(tmp_path / 'log')]) == 1
-    assert 'no report' in capsys.readouterr().err
+    error = capsys.readouterr().err
+    assert 'no report' in error
+    assert 'snapshot' not in error
 
 
 def test_dispatch_stops_when_the_cli_is_not_logged_in(tmp_path, repo, monkeypatch, capsys):

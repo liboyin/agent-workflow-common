@@ -3,8 +3,9 @@
 
 The base revision is read from the target when the prompt is written, never remembered. Standard
 input is closed, because the CLI otherwise waits for more prompt text. The raw event stream goes to
-``--log``; the session ID and the reviewer's report are printed. A missing CLI or login stops the
-dispatch before anything is sent.
+``--log``; the session ID and the reviewer's report are printed, followed by a reminder on standard
+error to compare integrity snapshots before any edit. A missing CLI or login stops the dispatch
+before anything is sent. A task group passes ``--boundary`` once for each task.
 
 Configuration: the optional ``dispatch`` object of ``agent-workflow.json`` at the root of the target.
 Every key is optional, and every value is a string.
@@ -36,6 +37,12 @@ CONFIG_FILE = 'agent-workflow.json'
 _RULES = (
     'The repository is read-only for you; run anything that needs writable state in a disposable scratch copy '
     "under the skill's rules."
+)
+
+
+_COMPARE_FIRST = (
+    'Next, before you edit anything: take a new integrity snapshot and compare it with the one taken before this '
+    'dispatch. An edit made first hides any change the reviewer made.'
 )
 
 
@@ -108,10 +115,15 @@ def base_revision(target: Path) -> str:
 
 
 def first_prompt(
-    target: Path, boundary: str, record: str, purpose: str, scope: str, untracked: list[str], ignored: list[str],
-    config: Config,
+    target: Path, boundaries: list[str], record: str, purpose: str, scope: str, untracked: list[str],
+    ignored: list[str], config: Config,
 ) -> str:
-    """Return the prompt for a first assessment, supplying only what the review skill allows."""
+    """Return the prompt for a first assessment, supplying only what the review skill allows.
+
+    A task group has one accepted boundary for each task, and the prompt names them all.
+    """
+    label = 'Accepted boundary' if len(boundaries) == 1 else 'Accepted boundaries'
+    accepted = ', '.join(boundaries)
     include = f"In-scope untracked files: {', '.join(untracked)}.\n" if untracked else ''
     ignore = f"Unrelated paths to ignore: {', '.join(ignored)}.\n" if ignored else ''
     rules = f'{_RULES} {config.safety}'.rstrip()
@@ -123,7 +135,7 @@ def first_prompt(
         f'Read {target / config.skill} and perform step 3 (Investigate and report) as the independent reviewer. '
         f'{rules}\n\n'
         f'Repository: {target}\nTarget: the working tree, base revision {base_revision(target)}.\n'
-        f'In-scope paths: {scope}.\n{include}{ignore}Purpose: {purpose}\nAccepted boundary: {boundary}\n'
+        f'In-scope paths: {scope}.\n{include}{ignore}Purpose: {purpose}\n{label}: {accepted}\n'
         f'Working record with the gate results and mutation evidence: {record}\n\n{identity}'
     )
 
@@ -177,7 +189,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--target', type=Path, default=Path.cwd(), help='the repository or frozen worktree')
     parser.add_argument('--record', required=True, help='the working record holding the evidence')
     parser.add_argument('--log', type=Path, required=True, help="where to write the CLI's raw events")
-    parser.add_argument('--boundary', help='the accepted boundary; required for a first assessment')
+    parser.add_argument(
+        '--boundary', action='append', default=[],
+        help="an accepted boundary; required for a first assessment; repeat it for each task of a group",
+    )
     parser.add_argument('--purpose', help='the purpose in a few sentences; required for a first assessment')
     parser.add_argument('--scope', default='every changed tracked file', help='the in-scope paths')
     parser.add_argument('--untracked', action='append', default=[], help='an in-scope untracked file; repeatable')
@@ -216,6 +231,8 @@ def main(argv: list[str] | None = None) -> int:
     if status == 0 and report is None:
         print('dispatch: the reviewer returned no report', file=sys.stderr)
         return 1
+    if report is not None:
+        print(f'dispatch: {_COMPARE_FIRST}', file=sys.stderr)
     return status
 
 
