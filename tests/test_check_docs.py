@@ -379,6 +379,63 @@ def test_a_moved_task_file_that_grew_many_times_keeps_its_old_lines_unchecked(re
     assert [line.split(': ')[0] for line in lines] == ['tasks/closed/T1.md:85']
 
 
+def test_a_line_whose_only_change_is_a_link_destination_stays_unchecked(repo, capsys):
+    """Repointing a link, inline or as a definition, does not bring the old text of its line into scope."""
+    repo.write('agent-workflow.json', PARTIAL_CONFIG)
+    repo.write('a.md', '# A\n')
+    repo.write('b.md', '# B\n')
+    repo.write('DESIGN.md', '# Design\n\nOld; see [the task](a.md).\n\n[ref]: a.md\n\nOld; see [ref].\n')
+    repo.commit()
+    repo.write('DESIGN.md', '# Design\n\nOld; see [the task](b.md#b).\n\n[ref]: b.md\n\nOld; see [ref].\n')
+    assert repo.check(capsys) == (0, [])
+
+
+@pytest.mark.parametrize('changed', [
+    'Old; see [the task](b.md), now.',
+    'Old; see [a task](b.md).',
+    'Old; see [the task](b.md).\n\nOld; see [the task](b.md).',
+])
+def test_a_line_with_more_than_a_new_destination_is_checked(repo, capsys, changed):
+    """New text, new link text, or a second copy of the repointed line is a change that the style rules judge."""
+    repo.write('agent-workflow.json', PARTIAL_CONFIG)
+    repo.write('a.md', '# A\n')
+    repo.write('b.md', '# B\n')
+    repo.write('DESIGN.md', '# Design\n\nOld; see [the task](a.md).\n')
+    repo.commit()
+    repo.write('DESIGN.md', f'# Design\n\n{changed}\n')
+    status, lines = repo.check(capsys)
+    assert status == 1
+    assert [line.split(': ')[1] for line in lines] == ['semicolon']
+
+
+def test_joined_hunks_keep_the_line_numbers_of_later_changes(repo, capsys):
+    """With diff.interHunkContext, a hunk holds context lines; a change after them is still found and checked."""
+    repo.write('agent-workflow.json', PARTIAL_CONFIG)
+    repo.write('a.md', '# A\n')
+    repo.write('b.md', '# B\n')
+    repo.write('DESIGN.md', '# Design\n\nSee [the task](a.md).\n\nClean text.\n')
+    repo.commit()
+    repo.git('config', 'diff.interHunkContext', '2')
+    repo.write('DESIGN.md', '# Design\n\nSee [the task](b.md).\n\nNew; text.\n')
+    status, lines = repo.check(capsys)
+    assert status == 1
+    assert [line.split(': ')[:2] for line in lines] == [['DESIGN.md:5', 'semicolon']]
+
+
+def test_links_to_a_moved_task_file_can_be_repointed_without_rewriting_their_lines(repo, capsys):
+    """Closing a task moves its file; the old lines that link to it, in it and elsewhere, stay unchecked."""
+    repo.write('agent-workflow.json', PARTIAL_CONFIG)
+    repo.write('tasks/TODO.md', '# TODO\n\n- [T2](open/T2.md) — Low. Other.\n')
+    repo.write('tasks/open/T1.md', '# T1: a title\n\nOld; after [T2](T2.md).\n')
+    repo.write('tasks/open/T2.md', '# T2: other\n\nOld; see [T1](T1.md).\n')
+    repo.commit()
+    (repo.root / 'tasks/closed').mkdir()
+    repo.git('mv', 'tasks/open/T1.md', 'tasks/closed/T1.md')
+    repo.write('tasks/closed/T1.md', '# T1: a title\n\nOld; after [T2](../open/T2.md).\n')
+    repo.write('tasks/open/T2.md', '# T2: other\n\nOld; see [T1](../closed/T1.md).\n')
+    assert repo.check(capsys) == (0, [])
+
+
 def test_an_untracked_file_is_checked_as_a_whole(repo, capsys):
     """A new record has no committed lines, so every line of it is in scope."""
     repo.write('agent-workflow.json', PARTIAL_CONFIG)

@@ -34,6 +34,7 @@ A project configures the tools in one optional file, `agent-workflow.json`, at t
 ```
 
 - `check_docs.changed_lines_only` lists path prefixes of the files whose style is checked on changed lines only. The default is none.
+- A line whose only change is a link destination does not count as changed. Repointing the links to a moved file then brings no old text into scope.
 - `check_docs.tasks.id` is a regular expression that matches a whole task ID. The default is `T\d+`.
 - `check_docs.tasks.title_separators` lists each text that may follow the ID in the title of a task file. The default is a colon.
 - `check_docs.tasks.exempt` lists the task files that the task rules skip. The default is none.

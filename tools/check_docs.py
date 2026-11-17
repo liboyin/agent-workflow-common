@@ -13,6 +13,8 @@ Style: the rules of STYLE.md that need no judgment. A list item is checked as an
 for each sentence) and other prose as a description (35 words). Code, tables, headings, block quotes and
 YAML front matter are exempt. In the files that the configuration names as not rewritten as a whole,
 only changed lines are checked: lines that ``git diff HEAD`` adds, and every line of an untracked file.
+A line whose only change is the destination of a link does not count as changed, so that a moved file
+does not bring the old text that links to it back into scope.
 
 Configuration: the optional ``check_docs`` object of ``agent-workflow.json`` at the root of the
 repository. Every key is optional.
@@ -183,18 +185,46 @@ def changed_lines(repo: Path) -> tuple[dict[str, set[int]], set[str]]:
     A file that ``git mv`` moved keeps its unchanged lines out of the result, because the diff detects
     renames. The similarity threshold is low, so that a moved file still pairs with its origin after
     it has grown to many times its size, as a task file does when it becomes a completion record.
+
+    An added line that equals a line removed in the same hunk, apart from link destinations, is left
+    out: fixing the links to a moved file changes no text that the style rules judge. A hunk can hold
+    unchanged context lines despite ``--unified=0``, when Git's ``diff.interHunkContext`` joins nearby
+    changes, so context lines advance the line number too.
     """
     diff = git(repo, 'diff', 'HEAD', '--find-renames=1%', '--unified=0', '--no-color', '--no-ext-diff', '--', '*.md')
     added: dict[str, set[int]] = {}
     current: set[int] = set()
+    removed: Counter[str] = Counter()
+    number = 0
+    in_hunk = False
     for line in diff.splitlines():
-        if line.startswith('+++ b/'):
+        if line.startswith('diff --git '):
+            in_hunk = False
+        elif not in_hunk and line.startswith('+++ b/'):
             current = added.setdefault(line[len('+++ b/'):], set())
         elif match := _HUNK.match(line):
-            start, count = int(match[1]), int(match[2] or '1')
-            current.update(range(start, start + count))
+            in_hunk, number, removed = True, int(match[1]), Counter()
+        elif in_hunk and line.startswith('-'):
+            removed[_without_destinations(line[1:])] += 1
+        elif in_hunk and line.startswith(' '):
+            number += 1
+        elif in_hunk and line.startswith('+'):
+            text = _without_destinations(line[1:])
+            if removed[text]:
+                removed[text] -= 1
+            else:
+                current.add(number)
+            number += 1
     untracked = git(repo, 'ls-files', '-z', '--others', '--exclude-standard', '--', '*.md')
     return added, {name for name in untracked.split('\0') if name}
+
+
+def _without_destinations(line: str) -> str:
+    """Return a line with the destination of each inline link and link definition removed."""
+    definition = _DEFINITION.match(line)
+    if definition:
+        return f'[{definition[1]}]:'
+    return _LINK.sub(lambda match: f'[{match[1]}]()', line)
 
 
 def classify(text: str) -> list[tuple[int, str, str]]:
