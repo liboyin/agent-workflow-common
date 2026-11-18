@@ -11,8 +11,8 @@ Configuration: the optional ``dispatch`` object of ``agent-workflow.json`` at th
 Every key is optional, and every value is a string.
 
     {"dispatch": {
-        "model": "gpt-6.1-sol",
-        "effort": "medium",
+        "model": "gpt-6.2-sol",
+        "effort": "high",
         "skill": ".agents/skills/adversarial-review/SKILL.md",
         "safety": "Never contact the live service."
     }}
@@ -63,8 +63,8 @@ class Config:
         safety: A project rule that every prompt for a first assessment states, or an empty string.
     """
 
-    model: str = 'gpt-6.1-sol'
-    effort: str = 'medium'
+    model: str = 'gpt-6.2-sol'
+    effort: str = 'high'
     skill: str = '.agents/skills/adversarial-review/SKILL.md'
     safety: str = ''
 

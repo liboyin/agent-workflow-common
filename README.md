@@ -25,8 +25,8 @@ A project configures the tools in one optional file, `agent-workflow.json`, at t
     }
   },
   "dispatch": {
-    "model": "gpt-6.1-sol",
-    "effort": "medium",
+    "model": "gpt-6.2-sol",
+    "effort": "high",
     "skill": ".agents/skills/adversarial-review/SKILL.md",
     "safety": "Never contact the live service, and never read .env."
   }

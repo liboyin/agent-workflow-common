@@ -90,8 +90,8 @@ def test_dispatch_reads_the_base_revision_from_the_target(tmp_path, repo, monkey
     arguments = record.read_text(encoding='utf-8')
     assert status == 0
     assert git(repo, 'rev-parse', 'HEAD').strip() in arguments
-    assert 'gpt-6.1-sol' in arguments
-    assert 'model_reasoning_effort="medium"' in arguments
+    assert 'gpt-6.2-sol' in arguments
+    assert 'model_reasoning_effort="high"' in arguments
     assert f'Read {repo}/.agents/skills/adversarial-review/SKILL.md and perform step 3' in arguments
     assert "under the skill's rules.\n" in arguments
     assert 'In-scope untracked files: src/new.py, tests/test_new.py.' in arguments
@@ -134,7 +134,7 @@ def test_dispatch_uses_the_settings_of_the_target(tmp_path, repo, monkeypatch):
     assert 'the dispatch arguments are model-x and high' in arguments
     assert 'untracked' not in arguments
     assert 'Unrelated paths' not in arguments
-    assert 'gpt-6.1-sol' not in arguments
+    assert 'gpt-6.2-sol' not in arguments
 
 
 def test_dispatch_resumes_the_recorded_reviewer(tmp_path, repo, monkeypatch):
